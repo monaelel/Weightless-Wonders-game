@@ -1,0 +1,135 @@
+// Level 3: Three-zone gravity demo (Earth / Mars / Moon)
+let state = {};
+export function stop(){ if(state) state.running = false; }
+export function start(ctx){
+    return new Promise(resolve=>{
+        const canvas = ctx.canvas; const c = canvas; const g = c.getContext('2d');
+        // Real gravity values (m/s^2) and scale to convert to game units (px/frame^2)
+        const REAL_GRAVITIES = {
+            earth: 9.81,
+            mars: 3.71,
+            moon: 1.62
+        };
+        // scale factor determined from previous tuning (game Earth gravity ~= 0.45)
+        const GAME_SCALE = 0.45 / 9.81; // multiply real m/s^2 to get game units
+
+    state = { running:true, canvas:c, ctx:g, player:{x: c.width/2, y:50, r:14, xVel:0, yVel:0, dir:'left', onGround:false}, animId:null, resolve };
+
+        // cleanup any existing slider elements
+        try{ const olds = ctx.hud.querySelectorAll('.gravity-slider'); olds.forEach(el=>el.remove()); }catch(e){}
+
+        // input listeners
+        const keys = {};
+        function kd(e){ keys[e.code] = true; if(e.code==='ArrowLeft' || e.code==='KeyA') state.player.dir='left'; if(e.code==='ArrowRight' || e.code==='KeyD') state.player.dir='right';
+            // jump keys
+            if((e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW') && state.player.onGround){
+                // compute a jump impulse so the player reaches a sensible height per zone
+                const zone = zoneForX(state.player.x);
+                // simple factors based on real-world jump multipliers (relative to Earth)
+                // Earth ≈ 1.0 m baseline, Mars ≈ 2.6 m, Moon ≈ 6.0 m — use these as factors
+                const jumpFactors = { earth: 1.0, mars: 2.6, moon: 6.0 };
+                // base pixel height for a 1-meter jump on Earth (scale with canvas height)
+                const basePixel = Math.max(80, Math.floor(c.height * 0.12));
+                const factor = jumpFactors[zone] || 1.0;
+                const desiredH = basePixel * factor;
+                // use the scaled game gravity (px/frame^2)
+                const real = REAL_GRAVITIES[zone] || REAL_GRAVITIES.earth;
+                const gameG = real * GAME_SCALE;
+                // v = sqrt(2 * g * h) ; negative because up is negative y
+                const jumpV = -Math.sqrt(2 * Math.max(0.0001, gameG) * Math.max(8, desiredH));
+                state.player.yVel = jumpV;
+                state.player.onGround = false;
+            }
+        }
+        function ku(e){ keys[e.code] = false; }
+        window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
+
+        function zoneForX(x){ const third = c.width/3; if(x < third) return 'earth'; if(x < third*2) return 'mars'; return 'moon'; }
+
+        function drawBackground(){
+            try{
+                const imgEarth = window.assets && window.assets.images && window.assets.images.earth;
+                const imgMars = window.assets && window.assets.images && window.assets.images.mars;
+                const imgMoon = window.assets && window.assets.images && window.assets.images.moon;
+                const third = c.width/3;
+                if(imgEarth) g.drawImage(imgEarth, 0, 0, third, c.height);
+                else { g.fillStyle = '#2e6fd8'; g.fillRect(0,0,third,c.height); }
+                if(imgMars) g.drawImage(imgMars, third, 0, third, c.height);
+                else { g.fillStyle = '#b85b3a'; g.fillRect(third,0,third,c.height); }
+                if(imgMoon) g.drawImage(imgMoon, third*2, 0, third, c.height);
+                else { g.fillStyle = '#cfcfcf'; g.fillRect(third*2,0,third,c.height); }
+            }catch(e){ /* fallback backgrounds */ const third=c.width/3; g.fillStyle='#2e6fd8'; g.fillRect(0,0,third,c.height); g.fillStyle='#b85b3a'; g.fillRect(third,0,third,c.height); g.fillStyle='#cfcfcf'; g.fillRect(third*2,0,third,c.height); }
+        }
+
+        function drawPlayer(){
+            try{
+                const imgL = window.assets && window.assets.images && window.assets.images.astronautLeft;
+                const imgR = window.assets && window.assets.images && window.assets.images.astronautRight;
+                const pSize = 64; // larger for visibility
+                if(state.player.dir === 'right' && imgR){ g.drawImage(imgR, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize); return; }
+                if(imgL){ g.drawImage(imgL, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize); return; }
+                // fallback
+                g.beginPath(); g.fillStyle='#88e0ff'; g.arc(state.player.x,state.player.y,state.player.r,0,Math.PI*2); g.fill(); g.closePath();
+            }catch(e){ g.beginPath(); g.fillStyle='#88e0ff'; g.arc(state.player.x,state.player.y,state.player.r,0,Math.PI*2); g.fill(); g.closePath(); }
+        }
+
+        function loop(){
+            if(!state.running) return;
+            g.clearRect(0,0,c.width,c.height);
+            drawBackground();
+
+            // input horizontal
+            const hSpeed = 2.2;
+            if(keys['ArrowLeft']||keys['KeyA']) state.player.xVel = -hSpeed;
+            else if(keys['ArrowRight']||keys['KeyD']) state.player.xVel = hSpeed;
+            else state.player.xVel *= 0.9;
+
+            // determine gravity by zone (use scaled game gravity for physics)
+            const zone = zoneForX(state.player.x);
+            const realG = REAL_GRAVITIES[zone] || REAL_GRAVITIES.earth;
+            const grav = realG * GAME_SCALE;
+            state.player.yVel += grav;
+
+            // simple ground at bottom
+            state.player.x += state.player.xVel;
+            state.player.y += state.player.yVel;
+            // clamp horizontally
+            state.player.x = Math.max(state.player.r, Math.min(c.width - state.player.r, state.player.x));
+            if(state.player.y + state.player.r > c.height - 20){ state.player.y = c.height - 20 - state.player.r; state.player.yVel = 0; state.player.onGround = true; }
+
+            // draw dividing lines
+            const third = c.width/3;
+            g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 2; g.beginPath(); g.moveTo(third,0); g.lineTo(third,c.height); g.moveTo(third*2,0); g.lineTo(third*2,c.height); g.stroke(); g.closePath();
+
+            // zone labels and gravity readout
+            g.fillStyle = 'rgba(255,255,255,0.9)'; g.font = '18px serif'; g.textAlign = 'center';
+            g.fillText('Earth', third/2, 30); g.fillText('Mars', third + third/2, 30); g.fillText('Moon', third*2 + third/2, 30);
+            // show real gravity (m/s^2) to the player
+            g.fillText('g = ' + realG.toFixed(2) + ' m/s²', state.player.x, 60);
+
+            drawPlayer();
+
+            state.animId = requestAnimationFrame(loop);
+        }
+
+        function finish(r){ state.running = false; try{ if(state.animId) cancelAnimationFrame(state.animId); }catch(e){} window.removeEventListener('keydown',kd); window.removeEventListener('keyup',ku); resolve(r===true); }
+
+    // init and start (place player on ground so jump is available immediately)
+    state.player.x = c.width/2; state.player.y = c.height - 20 - state.player.r; state.player.onGround = true; try{ ctx.hud.querySelector('#score').textContent=''; }catch(e){}
+            // play option sound then short narration (prefer lvl3Voice if preloaded)
+            let narrationAudio = null;
+            try{ if(window.assets && window.assets.audio && window.assets.audio.option){ window.assets.audio.option.currentTime = 0; window.assets.audio.option.play().catch(()=>{}); } }catch(e){}
+            const narrationTimeout = setTimeout(()=>{
+                try{
+                    if(window.assets && window.assets.audio && window.assets.audio.lvl3Voice){
+                        narrationAudio = window.assets.audio.lvl3Voice; narrationAudio.currentTime = 0; narrationAudio.play().catch(()=>{});
+                        console.log('Level 3 narration: playing lvl3Voice');
+                    } else {
+                        console.log('Level 3 narration: using speechSynthesis fallback');
+                        ctx.speak('Three gravity zones: Earth, Mars, and Moon. Move left and right to enter each zone and feel the change in gravity.');
+                    }
+                }catch(e){ console.warn('Level 3 narration failed', e); }
+            },800);
+        loop();
+    });
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Starfield Background</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="starfield" title="This is a starfield background."></div>
+
+  <!-- Main Menu (uses existing starfield background) -->
+  <div id="menu" class="menu">
+    <h1 class="menu-title">Weightless Wonders</h1>
+    <p class="menu-sub">Learn about gravity, weightlessness, and orbital motion</p>
+    <div class="menu-actions">
+      <button id="startButton" class="btn primary">Start (Play Levels in order)</button>
+      <div class="level-list" aria-label="Choose a level">
+        <button class="btn secondary level-btn" data-level="1">Level 1</button>
+        <button class="btn secondary level-btn" data-level="2">Level 2</button>
+        <button class="btn secondary level-btn" data-level="3">Level 3</button>
+        <button class="btn secondary level-btn" data-level="4">Level 4</button>
+  <!-- Level 5 removed -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Game Canvas for Level 1 (hidden until Start is pressed) -->
+  <div id="gameContainer" class="game-container hidden">
+    <canvas id="gameCanvas" width="1024" height="576"></canvas>
+    <div id="hud" class="hud">
+      <span id="score">Stars: 0</span>
+      <button id="backToMenu" class="btn secondary">Menu</button>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script> <!-- Link to external JavaScript module -->
+</body>
+
+</html>
