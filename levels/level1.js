@@ -21,6 +21,7 @@ export function start(ctx){
             player: null,
             stars: [],
             score: 0,
+            collectedTotal: 0,
             animId: null,
             resolve
         };
@@ -38,17 +39,10 @@ export function start(ctx){
             };
         }
 
-        function generateStars(n){
-            state.stars = [];
-            for(let i=0;i<n;i++){
-                state.stars.push({
-                    x: Math.random()*(c.width-40)+20,
-                    y: Math.random()*(c.height-40)+20,
-                    r: 8,
-                    collected: false
-                });
-            }
+        function addOneStar(){
+            state.stars.push({ x: Math.random()*(c.width-40)+20, y: Math.random()*(c.height-40)+20, r: 8, collected:false });
         }
+        function generateStars(n){ state.stars = []; for(let i=0;i<n;i++) addOneStar(); }
 
     function clear(){ state.ctx.clearRect(0,0,c.width,c.height); }
     function drawCircle(x,y,r,col){ state.ctx.beginPath(); state.ctx.fillStyle = col; state.ctx.arc(x,y,r,0,Math.PI*2); state.ctx.fill(); state.ctx.closePath(); }
@@ -65,6 +59,8 @@ export function start(ctx){
     function playBeep(){ try{ const a = window.assets && window.assets.audio && window.assets.audio.starCollect; if(a){ a.currentTime = 0; a.play().catch(()=>{}); return; } }catch(e){} try{ const aCtx = new (window.AudioContext || window.webkitAudioContext)(); const o = aCtx.createOscillator(); const g = aCtx.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.02; o.connect(g); g.connect(aCtx.destination); o.start(); setTimeout(()=>{ o.stop(); aCtx.close(); }, 80);}catch(e){} }
 
         function loop(){
+            // global pause support: levels should stop updating when a shared pause is set
+            try{ if(window.levelManager && window.levelManager.paused) { requestAnimationFrame(loop); return; } }catch(e){}
             if(!state.running) return;
             clear();
             if(keys['ArrowUp']||keys['KeyW']) state.player.yVel -= state.player.thrust;
@@ -92,8 +88,16 @@ export function start(ctx){
                 if(dist < s.r + state.player.r){
                     s.collected = true;
                     state.score++;
-                    try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.score; }catch(e){}
+                    state.collectedTotal++;
+                    try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.collectedTotal; }catch(e){}
                     playBeep();
+                    // ensure at least 6 visible stars
+                    // remove the collected star and spawn a replacement later
+                    setTimeout(()=>{
+                        // prune collected flags and ensure at least 6 uncollected exist
+                        state.stars = state.stars.filter(x=>!x.collected);
+                        while(state.stars.length < 6){ addOneStar(); }
+                    }, 80);
                 }
             });
 
@@ -113,9 +117,9 @@ export function start(ctx){
                 state.ctx.beginPath(); state.ctx.fillStyle='rgba(255,180,90,0.9)'; state.ctx.arc(state.player.x, state.player.y+state.player.r+6, 6, 0, Math.PI*2); state.ctx.fill(); state.ctx.closePath();
             }
 
-            if(state.score >= state.stars.length){
-                // success — play level passed audio if available
-                try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('Well done! You collected all the stars in microgravity.'); } }catch(e){ }
+            // win when total collected reaches 20
+            if(state.collectedTotal >= 20){
+                try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('Well done! You collected 20 stars.'); } }catch(e){}
                 setTimeout(()=>finish(true),800);
                 return;
             }

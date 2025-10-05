@@ -7,7 +7,7 @@ export function stop(){ state.running = false; }
 export function start(ctx){
     return new Promise(resolve=>{
         const canvas = ctx.canvas; const c = canvas; const g = c.getContext('2d');
-        state = { running:true, canvas:c, ctx:g, player:null, stars:[], score:0, animId:null, resolve };
+        state = { running:true, canvas:c, ctx:g, player:null, stars:[], score:0, collectedTotal:0, animId:null, resolve };
 
         function initPlayer(){
             state.player = {
@@ -119,6 +119,8 @@ export function start(ctx){
         function drawStarImage(s){ try{ const img = window.assets && window.assets.images && window.assets.images.star; if(img){ const size = 28; g.drawImage(img, s.x - size/2, s.y - size/2, size, size); return; } }catch(e){} drawCircle(s.x,s.y,Math.max(6,s.r),'gold'); }
 
         function loop(){
+            // pause support
+            try{ if(window.levelManager && window.levelManager.paused){ state.animId = requestAnimationFrame(loop); return; } }catch(e){}
             if(!state.running) return;
             clear();
             // draw looping falling background first
@@ -160,8 +162,11 @@ export function start(ctx){
                 if(dist < s.r + state.player.r){
                     s.collected = true;
                     state.score++;
-                    try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.score; }catch(e){}
+                    state.collectedTotal++;
+                    try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.collectedTotal; }catch(e){}
                     playStarCollect();
+                    // spawn replacement to keep ~12 stars
+                    setTimeout(()=>{ if(state){ state.stars = state.stars.filter(x=>!x.collected); while(state.stars.length < 12) spawnStar(); } }, 80);
                 }
             }
 
@@ -180,9 +185,9 @@ export function start(ctx){
                 g.beginPath(); g.fillStyle='rgba(255,180,90,0.9)'; g.arc(state.player.x, state.player.y+state.player.r+6, 6, 0, Math.PI*2); g.fill(); g.closePath();
             }
 
-            // win at 10 stars
-            if(state.score >= 10){
-                try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('You reached 10 stars — level complete!'); } }catch(e){}
+            // require 20 collected stars to win
+            if(state.collectedTotal >= 20){
+                try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('You reached 20 stars — level complete!'); } }catch(e){}
                 setTimeout(()=>finish(true),800);
                 return;
             }
@@ -203,7 +208,7 @@ export function start(ctx){
         // init
         initPlayer();
         initBackground(80);
-        try{ ctx.hud.querySelector('#score').textContent = 'Stars: 0'; }catch(e){}
+    try{ ctx.hud.querySelector('#score').textContent = 'Stars: 0'; ctx.hud.querySelector('#objective').textContent = 'Objective: collect all the stars'; }catch(e){}
         try{ if(window.assets && window.assets.audio && window.assets.audio.option){ window.assets.audio.option.currentTime = 0; window.assets.audio.option.play().catch(()=>{}); } }catch(e){}
         // play option sound then narration after 1.5s
         let narrationAudio = null;

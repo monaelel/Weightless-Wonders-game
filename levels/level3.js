@@ -13,7 +13,7 @@ export function start(ctx){
         // scale factor determined from previous tuning (game Earth gravity ~= 0.45)
         const GAME_SCALE = 0.45 / 9.81; // multiply real m/s^2 to get game units
 
-    state = { running:true, canvas:c, ctx:g, player:{x: c.width/2, y:50, r:14, xVel:0, yVel:0, dir:'left', onGround:false}, animId:null, resolve };
+    state = { running:true, canvas:c, ctx:g, player:{x: c.width/2, y:50, r:14, xVel:0, yVel:0, dir:'left', onGround:false}, animId:null, stars:[], score:0, collectedTotal:0, resolve };
 
         // cleanup any existing slider elements
         try{ const olds = ctx.hud.querySelectorAll('.gravity-slider'); olds.forEach(el=>el.remove()); }catch(e){}
@@ -74,9 +74,17 @@ export function start(ctx){
         }
 
         function loop(){
+            // pause support
+            try{ if(window.levelManager && window.levelManager.paused){ state.animId = requestAnimationFrame(loop); return; } }catch(e){}
             if(!state.running) return;
             g.clearRect(0,0,c.width,c.height);
             drawBackground();
+
+            // simple star system (spawn near ground on random x)
+            function addStar(){ const x = 40 + Math.random() * (c.width - 80); const y = c.height - (40 + Math.random()*120); state.stars.push({x,y,r:8,collected:false}); }
+            if(state.stars.length < 6){ addStar(); }
+            // draw stars and check collection
+            for(let i=state.stars.length-1;i>=0;i--){ const s = state.stars[i]; if(s.collected) continue; try{ const img = window.assets && window.assets.images && window.assets.images.star; if(img) g.drawImage(img, s.x-14, s.y-14, 28,28); else { g.beginPath(); g.fillStyle='gold'; g.arc(s.x,s.y,s.r,0,Math.PI*2); g.fill(); g.closePath(); } }catch(e){} const dx = s.x - state.player.x; const dy = s.y - state.player.y; if(Math.sqrt(dx*dx+dy*dy) < s.r + state.player.r){ s.collected = true; state.collectedTotal++; try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.collectedTotal; }catch(e){} try{ if(window.assets && window.assets.audio && window.assets.audio.starCollect){ window.assets.audio.starCollect.currentTime = 0; window.assets.audio.starCollect.play().catch(()=>{}); } }catch(e){} state.stars.splice(i,1); } }
 
             // input horizontal
             const hSpeed = 2.2;
@@ -116,6 +124,7 @@ export function start(ctx){
 
     // init and start (place player on ground so jump is available immediately)
     state.player.x = c.width/2; state.player.y = c.height - 20 - state.player.r; state.player.onGround = true; try{ ctx.hud.querySelector('#score').textContent=''; }catch(e){}
+    try{ ctx.hud.querySelector('#objective').textContent = 'Objective: collect all the stars'; }catch(e){}
             // play option sound then short narration (prefer lvl3Voice if preloaded)
             let narrationAudio = null;
             try{ if(window.assets && window.assets.audio && window.assets.audio.option){ window.assets.audio.option.currentTime = 0; window.assets.audio.option.play().catch(()=>{}); } }catch(e){}

@@ -4,15 +4,14 @@ export function stop(){ state.running = false; }
 export function start(ctx){
     return new Promise(resolve=>{
         const canvas = ctx.canvas; const c = canvas; const g = c.getContext('2d');
-        state = { running: true, canvas:c, ctx:g, player:{x:50,y:300,r:14,xVel:0,yVel:0,jump:6, onGround:false}, platforms:[], stars:[], score:0, animId:null, resolve };
+    state = { running: true, canvas:c, ctx:g, player:{x:50,y:300,r:14,xVel:0,yVel:0,jump:6, onGround:false}, platforms:[], stars:[], score:0, collectedTotal:0, animId:null, resolve };
 
         // create a simple floor and a platform
         state.platforms.push({x:0,y:c.height-40,w:c.width,h:40});
         state.platforms.push({x:200,y:c.height-140,w:140,h:16});
 
-        function generateStars(){
-            state.stars = [ {x:220,y:c.height-170,r:8, collected:false}, {x:600,y:c.height-80,r:8, collected:false} ];
-        }
+        function addStar(x,y){ state.stars.push({x:x||(100+Math.random()*(c.width-200)), y:y||Math.max(40, c.height - 120 - Math.random()*160), r:8, collected:false}); }
+        function generateStars(){ state.stars = []; for(let i=0;i<6;i++) addStar(); }
 
     const keys = {};
     function kd(e){ keys[e.code]=true; if(e.code==='ArrowLeft'||e.code==='KeyA') state.player.dir='left'; if(e.code==='ArrowRight'||e.code==='KeyD') state.player.dir='right'; }
@@ -20,8 +19,12 @@ export function start(ctx){
     window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
 
     function clear(){ g.clearRect(0,0,c.width,c.height); }
+    // set objective HUD text
+    try{ ctx.hud.querySelector('#objective').textContent = 'Objective: collect all the stars'; }catch(e){}
     function drawStarImage(s){ try{ const img = window.assets && window.assets.images && window.assets.images.star; if(img){ const size = 28; g.drawImage(img, s.x - size/2, s.y - size/2, size, size); return; } }catch(e){} g.beginPath(); g.fillStyle='gold'; g.arc(s.x,s.y,Math.max(6,s.r),0,Math.PI*2); g.fill(); g.closePath(); }
         function draw(){
+            // pause support
+            try{ if(window.levelManager && window.levelManager.paused){ state.animId = requestAnimationFrame(draw); return; } }catch(e){}
             if(!state.running) return;
             clear();
             // input: horizontal movement (left/right) and gravity
@@ -48,13 +51,22 @@ export function start(ctx){
                 }
             });
 
-            // draw stars
-            state.stars.forEach(s=>{ if(s.collected) return; drawStarImage(s); const dx=s.x-state.player.x; const dy=s.y-state.player.y; if(Math.sqrt(dx*dx+dy*dy) < s.r + state.player.r){ s.collected=true; state.score++; try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.score; }catch(e){} try{ if(window.assets && window.assets.audio && window.assets.audio.starCollect){ window.assets.audio.starCollect.currentTime=0; window.assets.audio.starCollect.play().catch(()=>{}); } }catch(e){} } });
+            // draw stars and handle collection
+            for(let i=0;i<state.stars.length;i++){
+                const s = state.stars[i];
+                if(s.collected) continue;
+                drawStarImage(s);
+                const dx=s.x-state.player.x; const dy=s.y-state.player.y; if(Math.sqrt(dx*dx+dy*dy) < s.r + state.player.r){ s.collected=true; state.score++; state.collectedTotal++; try{ ctx.hud.querySelector('#score').textContent = 'Stars: ' + state.collectedTotal; }catch(e){} try{ if(window.assets && window.assets.audio && window.assets.audio.starCollect){ window.assets.audio.starCollect.currentTime=0; window.assets.audio.starCollect.play().catch(()=>{}); } }catch(e){}
+                    // spawn replacement to keep ~6 stars
+                    setTimeout(()=>{ state.stars = state.stars.filter(x=>!x.collected); while(state.stars.length < 6) addStar(); }, 80);
+                }
+            }
 
             // draw player as astronaut sprite if available
             try{ const imgL = window.assets && window.assets.images && window.assets.images.astronautLeft; const imgR = window.assets && window.assets.images && window.assets.images.astronautRight; const pSize = 48; if(state.player.dir==='right'&&imgR){ g.drawImage(imgR, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize); } else if(imgL){ g.drawImage(imgL, state.player.x - pSize/2, state.player.y - pSize/2, pSize, pSize); } else { g.beginPath(); g.fillStyle='#88e0ff'; g.arc(state.player.x,state.player.y,state.player.r,0,Math.PI*2); g.fill(); g.closePath(); } }catch(e){ g.beginPath(); g.fillStyle='#88e0ff'; g.arc(state.player.x,state.player.y,state.player.r,0,Math.PI*2); g.fill(); g.closePath(); }
 
-            if(state.score >= state.stars.length){ try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('Great job! You completed the Earth gravity test.'); } }catch(e){} setTimeout(()=>finish(true),800); return; }
+            // require 20 collected stars to pass
+            if(state.collectedTotal >= 20){ try{ if(window.assets && window.assets.audio && window.assets.audio.levelPass){ window.assets.audio.levelPass.currentTime = 0; window.assets.audio.levelPass.play().catch(()=>{}); } else { ctx.speak('Great job! You collected 20 stars.'); } }catch(e){} setTimeout(()=>finish(true),800); return; }
 
             state.animId = requestAnimationFrame(draw);
         }

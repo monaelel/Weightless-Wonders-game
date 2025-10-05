@@ -47,13 +47,18 @@ document.addEventListener("DOMContentLoaded", function () {
 		runningLevel: null,
 		paused: false
 	};
+	// expose globally so levels can read pause state and HUD objective
+	try{ window.levelManager = levelManager; }catch(e){}
 
 	const startButton = document.getElementById('startButton');
-	const levelButtons = document.querySelectorAll('.level-btn');
+	// level buttons removed from DOM; no per-level buttons available
+	const levelButtons = [];
 	const menu = document.getElementById('menu');
 	const gameContainer = document.getElementById('gameContainer');
 
 	const backToMenu = document.getElementById('backToMenu');
+	// hide Pause button UI (we'll use keyboard 'P' to toggle pause)
+	if(backToMenu) backToMenu.style.display = 'none';
 
 	// Simple asset loader (images + audio)
 	const assets = {
@@ -91,34 +96,30 @@ document.addEventListener("DOMContentLoaded", function () {
 	}
 
 	// preload assets in background and expose globally for levels
-	const assetsReady = loadAssets().then(() => { try{ window.assets = assets; }catch(e){} }).catch(e=>{ console.warn('Asset load failed', e); });
+	const assetsReady = loadAssets().then(() => { try{ window.assets = assets; }catch(e){}
+		// adjust volumes: star collect quieter, and start background music loop at 50%
+		try{ if(assets.audio && assets.audio.starCollect) assets.audio.starCollect.volume = 0.5; }catch(e){}
+		try{ if(assets.audio && assets.audio['space background music']){
+			assets.audio['space background music'].loop = true;
+			assets.audio['space background music'].volume = 0.5;
+			// start background music immediately and keep it playing regardless of pause/menu
+			assets.audio['space background music'].play().catch(()=>{});
+		}
+		}catch(e){}
+	}).catch(e=>{ console.warn('Asset load failed', e); });
 
 	// Start button: disable while loading and start sequence
 	startButton.addEventListener('click', async () => {
-		// If a level is currently loaded/paused, treat this as a Continue button
-		if(levelManager.runningLevel){
-			// Try to reuse the same behavior as clicking the specific level button
-			try{
-				const lvl = levelManager.current;
-				const btn = document.querySelector(`.level-btn[data-level="${lvl}"]`);
-				if(btn){
-					// trigger the same click handler as the level button
-					btn.click();
-					return;
-				}
-			}catch(e){}
-			// fallback: resume (unhide) existing game
-			menu.classList.add('hidden');
-			gameContainer.classList.remove('hidden');
-			levelManager.paused = false;
-			startButton.textContent = 'Start (Play Levels in order)';
+		// If paused, use the same toggle function as pressing P
+		if(levelManager.paused){
+			togglePause(); // same behavior as pressing P
 			return;
 		}
 		try{
 			startButton.disabled = true;
 			startButton.textContent = 'Loading...';
 			console.log('Start pressed — loading level sequence');
-			menu.classList.add('hidden');
+			// call sequence; startLevelSequence will hide the menu when it's ready to show the canvas
 			await startLevelSequence(1);
 		}catch(err){
 			console.error('Error starting level sequence', err);
@@ -133,12 +134,22 @@ document.addEventListener("DOMContentLoaded", function () {
 	levelButtons.forEach(btn => {
 		btn.addEventListener('click', () => {
 			const lvl = parseInt(btn.dataset.level, 10);
-			// If there's a running level already loaded, and user clicked that same level, treat as Continue
+			// If there's a running level already loaded and the user clicked the same level while it is active,
+			// restart that level fresh (stop + start). If it was only paused, resume instead.
 			if(levelManager.runningLevel && levelManager.current === lvl){
+				if(levelManager.paused){
+					menu.classList.add('hidden');
+					gameContainer.classList.remove('hidden');
+					levelManager.paused = false;
+					// resume narration if any
+					try{ if(assets && assets.audio){ ['lvl1Voice','lvl2Voice','lvl3Voice','lvl4Voice'].forEach(k=>{ const a=assets.audio[k]; if(a && a.paused && a.currentTime>0){ a.play().catch(()=>{}); } }); } }catch(e){}
+					return;
+				}
+				// otherwise restart the same level
+				stopRunningLevel();
+				levelManager.runningLevel = null;
 				menu.classList.add('hidden');
-				gameContainer.classList.remove('hidden');
-				levelManager.paused = false;
-				startButton.textContent = 'Start (Play Levels in order)';
+				startLevelSequence(lvl);
 				return;
 			}
 			// If a different level is running, stop it first to ensure fresh config
@@ -147,7 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
 				levelManager.runningLevel = null;
 			}
 			// otherwise start fresh at the chosen level
-			menu.classList.add('hidden');
+			// startLevelSequence will hide the menu when it's ready to show the canvas
 			startLevelSequence(lvl);
 		});
 	});
@@ -168,22 +179,67 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	window.addEventListener('resize', resizeCanvasToContainer);
 
-	if(backToMenu){
-		backToMenu.addEventListener('click', () => {
-			// play option sound and hide the game (do not fully stop the running module so Continue works)
-			if(assets.audio.option){ assets.audio.option.currentTime = 0; assets.audio.option.play().catch(()=>{}); }
-			// pause audio but keep the running module in memory so the user can continue
-			try{ Object.values(assets.audio || {}).forEach(a=>{ try{ a.pause(); }catch(e){} }); }catch(e){}
-			gameContainer.classList.add('hidden');
-			menu.classList.remove('hidden');
-			levelManager.paused = true;
-			// change start button to indicate continue
-			startButton.textContent = 'Continue';
-		});
+	// Pause button click handler removed; use keyboard 'P' to toggle pause/resume instead.
+
+	// helper used to resume narrations on Continue
+	function resumeNarrationIfAny(){
+		try{ if(assets && assets.audio){ ['lvl1Voice','lvl2Voice','lvl3Voice','lvl4Voice'].forEach(k=>{ const a = assets.audio[k]; if(a && a.paused && a.currentTime > 0){ a.play().catch(()=>{}); } }); } }catch(e){}
 	}
 
+	// Toggle pause/resume via keyboard 'P'
+	function togglePause(){
+		// only toggle when game canvas is visible
+		try{ const gc = document.getElementById('gameContainer'); if(gc && gc.classList.contains('hidden')) return; }catch(e){}
+		if(!levelManager.paused){
+			// pause
+			levelManager.paused = true;
+			// pause narration and some SFX
+			try{ if(assets && assets.audio){ ['lvl1Voice','lvl2Voice','lvl3Voice','lvl4Voice','starCollect','levelPass','option'].forEach(k=>{ const a = assets.audio[k]; if(a) try{ a.pause(); }catch(e){} }); } }catch(e){}
+			try{ 
+				const titleEl = menu && menu.querySelector && menu.querySelector('.menu-title'); 
+				if(titleEl) {
+					// Update both the SVG text and the fallback text
+					const svgText = titleEl.querySelector('svg text');
+					if(svgText) svgText.textContent = 'Pause';
+					// Update the fallback text content (the last text node)
+					const textNodes = Array.from(titleEl.childNodes).filter(node => node.nodeType === 3);
+					if(textNodes.length) textNodes[textNodes.length-1].textContent = 'Pause';
+				}
+			}catch(e){}
+			try{ menu.classList.remove('hidden'); }catch(e){}
+			try{ 
+				startButton.disabled = false; // Ensure button is enabled when showing Continue
+				startButton.textContent = 'Continue';
+			}catch(e){}
+		} else {
+			// resume
+			levelManager.paused = false;
+			try{ 
+				const titleEl = menu && menu.querySelector && menu.querySelector('.menu-title'); 
+				if(titleEl) {
+					// Update both the SVG text and the fallback text
+					const svgText = titleEl.querySelector('svg text');
+					if(svgText) svgText.textContent = 'Weightless Wonders';
+					// Update the fallback text content (the last text node)
+					const textNodes = Array.from(titleEl.childNodes).filter(node => node.nodeType === 3);
+					if(textNodes.length) textNodes[textNodes.length-1].textContent = 'Weightless Wonders';
+				}
+			}catch(e){}
+			try{ menu.classList.add('hidden'); }catch(e){}
+			// resume narration audio if present
+			try{ if(assets && assets.audio){ ['lvl1Voice','lvl2Voice','lvl3Voice','lvl4Voice'].forEach(k=>{ const a = assets.audio[k]; if(a && a.paused && a.currentTime>0){ a.play().catch(()=>{}); } }); } }catch(e){}
+			try{ 
+				startButton.disabled = false; // Ensure button is enabled when returning to start
+				startButton.textContent = 'Start (Play Levels in order)';
+			}catch(e){}
+		}
+	}
+
+	document.addEventListener('keydown', (e)=>{ if(e.code === 'KeyP'){ togglePause(); } });
+
 	function stopAllAudio(){
-		Object.values(assets.audio || {}).forEach(a=>{ try{ a.pause(); a.currentTime = 0; }catch(e){} });
+		// stop everything except background music which we want to persist across menu
+		Object.entries(assets.audio || {}).forEach(([k,a])=>{ try{ if(k === 'space background music'){ /* keep it playing */ return; } a.pause(); a.currentTime = 0; }catch(e){} });
 		// stop speech synthesis
 		if('speechSynthesis' in window){ speechSynthesis.cancel(); }
 	}
@@ -207,7 +263,16 @@ document.addEventListener("DOMContentLoaded", function () {
 		while(levelManager.current <= levelManager.total){
 			// resize canvas to a larger play area before starting
 			resizeCanvasToContainer();
-			gameContainer.classList.remove('hidden');
+			// wait for assets to be ready and ensure imports complete before hiding menu
+			try{ await assetsReady.catch(()=>{}); }catch(e){}
+			// Start reveal animation
+			menu.classList.add('reveal');
+			// After animation completes, hide menu and show game
+			setTimeout(() => {
+				menu.classList.add('hidden');
+				menu.classList.remove('reveal');
+				gameContainer.classList.remove('hidden');
+			}, 600);
 			const success = await startLevel(levelManager.current);
 			if(!success) break; // aborted
 			levelManager.current++;
@@ -216,6 +281,8 @@ document.addEventListener("DOMContentLoaded", function () {
 		stopRunningLevel();
 		gameContainer.classList.add('hidden');
 		menu.classList.remove('hidden');
+		// hide pause button again
+		try{ if(backToMenu) backToMenu.style.display = 'none'; }catch(e){}
 	}
 
 	let runningModule = null;
@@ -228,7 +295,54 @@ document.addEventListener("DOMContentLoaded", function () {
 			4: 3 // Level 4 should load what was Level 3
 		};
 
+		// Function to update progress bar
+		function updateProgress(stars) {
+			const progress = document.getElementById('progress');
+			if (progress) {
+				const percentage = (stars / 20) * 100;
+				progress.style.width = `${Math.min(100, percentage)}%`;
+			}
+		}
+
+		// Function to reset progress
+		function resetProgress() {
+			const progress = document.getElementById('progress');
+			if (progress) {
+				progress.style.width = '0%';
+			}
+		}
+
+		// Observer to watch for score changes
+		const scoreObserver = new MutationObserver((mutations) => {
+			mutations.forEach((mutation) => {
+				if (mutation.type === 'characterData' || mutation.type === 'childList') {
+					const scoreText = mutation.target.textContent || '';
+					const stars = parseInt(scoreText.match(/\d+/) || '0');
+					updateProgress(stars);
+				}
+			});
+		});
+
+		// Start observing score element
+		const scoreElement = document.getElementById('score');
+		if (scoreElement) {
+			scoreObserver.observe(scoreElement, {
+				characterData: true,
+				childList: true,
+				subtree: true
+			});
+		}
+
 		async function startLevel(n){
+			// Reset progress bar for new level
+			resetProgress();
+
+			// Update level-specific background
+			const gameContainer = document.getElementById('gameContainer');
+			if (gameContainer) {
+				gameContainer.dataset.level = n.toString();
+			}
+
 			let previousAlias = null;
 			let moduleNum = (levelModuleMap && levelModuleMap[n]) ? levelModuleMap[n] : n;
 			let moduleUrl = new URL(`./levels/level${moduleNum}.js`, import.meta.url).href;
@@ -293,6 +407,8 @@ document.addEventListener("DOMContentLoaded", function () {
 			try{ runningModule.stop(); }catch(e){/*ignore*/}
 		}
 		runningModule = null;
+		// Reset progress when stopping level
+		resetProgress();
 	}
 
 	// Web Speech helper
