@@ -51,9 +51,10 @@ export function start(ctx){
             if(x && y) {
                 state.stars.push({x, y, r:8, collected:false}); 
             } else {
-                // Random star placement throughout the screen
+                // Random star placement in lower 3/4 of the screen only
                 const x = 40 + Math.random()*(c.width-80); // Keep away from edges
-                const y = Math.max(40, Math.random()*(c.height-80)); // Full screen height minus margins
+                const minY = c.height * 0.25; // Start from 1/4 down from top (3/4 from bottom)
+                const y = Math.max(40, minY + Math.random()*(c.height-80-minY)); // Lower 3/4 of screen
                 state.stars.push({x, y, r:8, collected:false});
             }
         }
