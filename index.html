@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Starfield Background</title>
+  <title>Weightless Wonders</title>
   <link rel="icon" href="assets/favicon.ico">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -17,8 +17,8 @@
 
   <!-- Top bar: instructions and objective (moved to top per user request) -->
   <div id="topbar" class="topbar" style="position:fixed;left:0;right:0;top:8px;display:flex;justify-content:center;gap:24px;z-index:60;pointer-events:none;">
-    <div id="objective" class="objective" style="pointer-events:auto;background:transparent;color:#fff;padding:6px 12px;border-radius:6px;">Objective: collect 20 stars</div>
-    <div id="instructions" class="instructions" style="pointer-events:auto;background:transparent;color:#ddd;padding:6px 12px;border-radius:6px;">Controls: Use W, A, S, D or Arrow keys to move</div>
+    <div id="objective" class="objective" style="pointer-events:auto;background:transparent;color:#fff;padding:6px 12px;border-radius:6px;">Objective: collect 2 stars</div>
+    <div id="instructions" class="instructions" style="pointer-events:auto;background:transparent;color:#ddd;padding:6px 12px;border-radius:6px;">Controls: Use W, A, S, D or Arrow keys to move. Press P to pause</div>
   </div>
 
   <div class="starfield" title="This is a starfield background."></div>
@@ -38,10 +38,6 @@
     </p>
     <div class="menu-actions">
       <button id="startButton" class="btn primary">Start</button>
-      <!-- level selection removed; game flows from Start button -->
-      <div class="level-list" aria-label="Choose a level">
-        <!-- removed level buttons to simplify UI -->
-      </div>
     </div>
   </div>
 
@@ -58,7 +54,6 @@
           </div>
         </div>
       </div>
-      <button id="backToMenu" class="btn secondary">Pause</button>
     </div>
   </div>
 

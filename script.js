@@ -51,14 +51,10 @@ document.addEventListener("DOMContentLoaded", function () {
 	try{ window.levelManager = levelManager; }catch(e){}
 
 	const startButton = document.getElementById('startButton');
-	// level buttons removed from DOM; no per-level buttons available
-	const levelButtons = [];
 	const menu = document.getElementById('menu');
 	const gameContainer = document.getElementById('gameContainer');
 
-	const backToMenu = document.getElementById('backToMenu');
-	// hide Pause button UI (we'll use keyboard 'P' to toggle pause)
-	if(backToMenu) backToMenu.style.display = 'none';
+	// Pause functionality handled by 'P' key only
 
 	// Simple asset loader (images + audio)
 	const assets = {
@@ -72,9 +68,9 @@ document.addEventListener("DOMContentLoaded", function () {
 			astronautLeft: './assets/astronaut left.png',
 			astronautRight: './assets/astronaut right.png',
 			star: './assets/star.jpg',
-			earth: './assets/earth.jpg',
-			mars: './assets/mars.jpg',
-			moon: './assets/moon.jpg'
+			earth: './assets/earth.png',
+			mars: './assets/mars.png',
+			moon: './assets/moon.png'
 		};
 		await Promise.all(Object.entries(imgList).map(([k, url]) => new Promise((res, rej) => {
 			const img = new Image(); img.onload = () => { assets.images[k] = img; res(); }; img.onerror = rej; img.src = url;
@@ -130,38 +126,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		}
 	});
 
-	// individual level buttons
-	levelButtons.forEach(btn => {
-		btn.addEventListener('click', () => {
-			const lvl = parseInt(btn.dataset.level, 10);
-			// If there's a running level already loaded and the user clicked the same level while it is active,
-			// restart that level fresh (stop + start). If it was only paused, resume instead.
-			if(levelManager.runningLevel && levelManager.current === lvl){
-				if(levelManager.paused){
-					menu.classList.add('hidden');
-					gameContainer.classList.remove('hidden');
-					levelManager.paused = false;
-					// resume narration if any
-					try{ if(assets && assets.audio){ ['lvl1Voice','lvl2Voice','lvl3Voice','lvl4Voice'].forEach(k=>{ const a=assets.audio[k]; if(a && a.paused && a.currentTime>0){ a.play().catch(()=>{}); } }); } }catch(e){}
-					return;
-				}
-				// otherwise restart the same level
-				stopRunningLevel();
-				levelManager.runningLevel = null;
-				menu.classList.add('hidden');
-				startLevelSequence(lvl);
-				return;
-			}
-			// If a different level is running, stop it first to ensure fresh config
-			if(levelManager.runningLevel){
-				stopRunningLevel();
-				levelManager.runningLevel = null;
-			}
-			// otherwise start fresh at the chosen level
-			// startLevelSequence will hide the menu when it's ready to show the canvas
-			startLevelSequence(lvl);
-		});
-	});
+
 
 	// Resize canvas to be larger and match container before starting a level
 	function resizeCanvasToContainer(){
@@ -281,19 +246,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		stopRunningLevel();
 		gameContainer.classList.add('hidden');
 		menu.classList.remove('hidden');
-		// hide pause button again
-		try{ if(backToMenu) backToMenu.style.display = 'none'; }catch(e){}
+		// Pause functionality handled by 'P' key only
 	}
 
 	let runningModule = null;
-	// levelModuleMap lets us change which JS module backs a given level number
-	// without moving files. Map format: requestedLevel -> actualModuleLevel
-		const levelModuleMap = {
-			1: 1,
-			2: 4, // your request: make Level 2 load the previous Level 4 module
-			3: 2, // Level 3 should load what was Level 2
-			4: 3 // Level 4 should load what was Level 3
-		};
 
 		// Function to update progress bar
 		function updateProgress(stars) {
@@ -343,27 +299,12 @@ document.addEventListener("DOMContentLoaded", function () {
 				gameContainer.dataset.level = n.toString();
 			}
 
-			let previousAlias = null;
-			let moduleNum = (levelModuleMap && levelModuleMap[n]) ? levelModuleMap[n] : n;
-			let moduleUrl = new URL(`./levels/level${moduleNum}.js`, import.meta.url).href;
+			let moduleUrl = new URL(`./levels/level${n}.js`, import.meta.url).href;
 			console.log('Importing level module from', moduleUrl);
-			// wait for assets to be ready so aliasing can reference the visible level's audio
+			// wait for assets to be ready before loading level
 			try{ await assetsReady.catch(()=>{}); }catch(e){}
 
 			try{
-				// AUDIO ALIASING: some modules reference assets.audio.lvl<moduleNum>Voice
-				// but you want visible Level n to use assets.audio.lvl<n>Voice.
-				// To avoid changing module code, temporarily alias the module's
-				// lvl<moduleNum>Voice entry to point to lvl<n>Voice before import.
-				if(assets && assets.audio){
-					const visibleKey = `lvl${n}Voice`;
-					const moduleKey = `lvl${moduleNum}Voice`;
-					if(assets.audio[visibleKey] && moduleKey !== visibleKey){
-						previousAlias = assets.audio[moduleKey] || null;
-						assets.audio[moduleKey] = assets.audio[visibleKey];
-						console.log(`Aliasing audio ${moduleKey} -> ${visibleKey} for this level run`);
-					}
-				}
 
 				// ensure any previous module is stopped before loading a new one
 				stopRunningLevel();
@@ -391,14 +332,7 @@ document.addEventListener("DOMContentLoaded", function () {
 				console.error('Failed to load level', n, err);
 				return false;
 			}finally{
-				// restore any aliased audio reference so other runs are unaffected
-				try{
-					if(previousAlias !== null && assets && assets.audio){
-						const moduleKey = `lvl${moduleNum}Voice`;
-						assets.audio[moduleKey] = previousAlias;
-						console.log(`Restored original ${moduleKey} audio reference after level run`);
-					}
-				}catch(e){ console.warn('Failed to restore audio alias', e); }
+				// All audio is now directly referenced by level number
 			}
 		}
 

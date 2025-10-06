@@ -1,4 +1,6 @@
-// Level 1: Gravity Balance (Microgravity)
+// Level 1: Basic Movement and Star Collection
+// Learn to control your astronaut and collect stars in normal gravity.
+// Use arrow keys or WASD to move and jump!: Gravity Balance (Microgravity)
 // Exports: start(ctx) -> Promise<boolean>, stop()
 
 let state = {};
@@ -96,7 +98,7 @@ export function start(ctx){
                     setTimeout(()=>{
                         // prune collected flags and ensure at least 6 uncollected exist
                         state.stars = state.stars.filter(x=>!x.collected);
-                        while(state.stars.length < 6){ addOneStar(); }
+                        while(state.stars.length < 12){ addOneStar(); }
                     }, 80);
                 }
             });
@@ -138,7 +140,7 @@ export function start(ctx){
 
         // init
         initPlayer();
-        generateStars(6);
+        generateStars(12);
         try{ ctx.hud.querySelector('#score').textContent = 'Stars: 0'; }catch(e){}
         // play option sound then narration after 1.5s (use lvl1Voice if available)
         let narrationAudio = null;
